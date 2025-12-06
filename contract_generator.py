@@ -10,12 +10,22 @@ from pathlib import Path
 
 from docxtpl import DocxTemplate
 
-logger = logging.getLogger(__name__)
+from config import (
+    TEMPLATE_PATH,
+    OUTPUT_DIR,
+    PDF_CONVERSION_TIMEOUT,
+    PDF_CONVERSION_RETRIES,
+    LIBREOFFICE_PATHS,
+)
+from exceptions import (
+    TemplateNotFoundError,
+    PDFConversionError,
+    LibreOfficeNotFoundError,
+    PDFConversionTimeoutError,
+)
+from validators import sanitize_text
 
-# Пути к файлам
-BASE_DIR = Path(__file__).parent
-TEMPLATE_PATH = BASE_DIR / "dogovor_template.docx"
-OUTPUT_DIR = BASE_DIR / "generated_contracts"
+logger = logging.getLogger(__name__)
 
 
 async def generate_contract(data: Dict[str, Any]) -> str:
@@ -29,28 +39,27 @@ async def generate_contract(data: Dict[str, Any]) -> str:
         Путь к сгенерированному PDF-файлу
 
     Raises:
-        FileNotFoundError: Если шаблон не найден
-        Exception: При ошибках генерации или конвертации
+        TemplateNotFoundError: Если шаблон не найден
+        PDFConversionError: При ошибках конвертации в PDF
     """
     # Проверяем наличие шаблона
     if not TEMPLATE_PATH.exists():
-        raise FileNotFoundError(
-            f"Шаблон договора не найден: {TEMPLATE_PATH}\n"
-            "Пожалуйста, создайте файл dogovor_template.docx"
-        )
+        logger.error(f"Шаблон не найден: {TEMPLATE_PATH}")
+        raise TemplateNotFoundError(f"Шаблон договора не найден: {TEMPLATE_PATH}")
 
     # Создаем директорию для выходных файлов
     OUTPUT_DIR.mkdir(exist_ok=True)
 
-    # Генерируем уникальное имя файла
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"contract_{timestamp}"
+    # Генерируем уникальное имя файла с user_id для безопасности
+    user_id = data.get("user_id", "unknown")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    output_filename = f"contract_{user_id}_{timestamp}"
     docx_path = OUTPUT_DIR / f"{output_filename}.docx"
     pdf_path = OUTPUT_DIR / f"{output_filename}.pdf"
 
     try:
         # Загружаем шаблон
-        logger.info(f"Загрузка шаблона: {TEMPLATE_PATH}")
+        logger.info(f"Генерация договора для пользователя {user_id}")
         doc = DocxTemplate(TEMPLATE_PATH)
 
         # Подготавливаем контекст для шаблона
@@ -64,21 +73,35 @@ async def generate_contract(data: Dict[str, Any]) -> str:
         doc.save(str(docx_path))
         logger.info(f"DOCX сохранен: {docx_path}")
 
-        # Конвертируем в PDF
+        # Конвертируем в PDF с retry логикой
         logger.info("Конвертация DOCX -> PDF")
-        convert_to_pdf(str(docx_path), str(pdf_path))
-        logger.info(f"PDF создан: {pdf_path}")
+        convert_to_pdf_with_retry(str(docx_path), str(pdf_path))
+        logger.info(f"PDF создан успешно: {pdf_path}")
 
         return str(pdf_path)
 
-    except Exception as e:
-        logger.error(f"Ошибка при генерации договора: {e}")
-        # Удаляем частично созданные файлы
-        if docx_path.exists():
-            docx_path.unlink()
-        if pdf_path.exists():
-            pdf_path.unlink()
+    except (TemplateNotFoundError, PDFConversionError, LibreOfficeNotFoundError):
+        # Пробрасываем кастомные исключения
+        _cleanup_files(docx_path, pdf_path)
         raise
+    except Exception as e:
+        # Неожиданная ошибка
+        logger.error(f"Неожиданная ошибка при генерации договора: {e}", exc_info=True)
+        _cleanup_files(docx_path, pdf_path)
+        raise PDFConversionError(f"Ошибка при генерации договора: {str(e)}")
+
+
+def _cleanup_files(*file_paths: Path) -> None:
+    """Удаляет временные файлы"""
+    for file_path in file_paths:
+        try:
+            if isinstance(file_path, str):
+                file_path = Path(file_path)
+            if file_path.exists():
+                file_path.unlink()
+                logger.debug(f"Удален временный файл: {file_path}")
+        except Exception as e:
+            logger.warning(f"Не удалось удалить файл {file_path}: {e}")
 
 
 def prepare_context(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -93,11 +116,12 @@ def prepare_context(data: Dict[str, Any]) -> Dict[str, Any]:
     """
 
     def clean_value(value: Any) -> Any:
-        """Очищает значение: если пустое или None, возвращает None, иначе строку"""
+        """Очищает и санитизирует значение"""
         if value is None:
             return None
         if isinstance(value, str):
-            value = value.strip()
+            # Санитизация для защиты от инъекций
+            value = sanitize_text(value)
             return value if value else None
         return str(value) if value else None
 
@@ -151,6 +175,29 @@ def prepare_context(data: Dict[str, Any]) -> Dict[str, Any]:
     return context
 
 
+def find_libreoffice() -> str:
+    """
+    Находит LibreOffice в системе
+
+    Returns:
+        Путь к исполняемому файлу LibreOffice
+
+    Raises:
+        LibreOfficeNotFoundError: Если LibreOffice не найден
+    """
+    for path in LIBREOFFICE_PATHS:
+        if os.path.exists(path) or path == "soffice":
+            logger.debug(f"LibreOffice найден: {path}")
+            return path
+
+    raise LibreOfficeNotFoundError(
+        "LibreOffice не найден. Установите LibreOffice:\n"
+        "macOS: brew install --cask libreoffice\n"
+        "Ubuntu/Debian: sudo apt-get install libreoffice\n"
+        "Windows: скачайте с https://www.libreoffice.org/"
+    )
+
+
 def convert_to_pdf(docx_path: str, pdf_path: str) -> None:
     """
     Конвертирует DOCX в PDF с помощью LibreOffice
@@ -160,72 +207,81 @@ def convert_to_pdf(docx_path: str, pdf_path: str) -> None:
         pdf_path: Путь для сохранения PDF файла
 
     Raises:
-        FileNotFoundError: Если LibreOffice не установлен
-        subprocess.CalledProcessError: При ошибке конвертации
+        LibreOfficeNotFoundError: Если LibreOffice не установлен
+        PDFConversionTimeoutError: При таймауте конвертации
+        PDFConversionError: При ошибке конвертации
     """
-    # Проверяем наличие LibreOffice
-    soffice_paths = [
-        "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
-        "/usr/bin/soffice",  # Linux
-        "/usr/bin/libreoffice",  # Linux alternative
-        "soffice",  # Windows / PATH
-    ]
-
-    soffice_cmd = None
-    for path in soffice_paths:
-        if os.path.exists(path) or path == "soffice":
-            soffice_cmd = path
-            break
-
-    if not soffice_cmd:
-        raise FileNotFoundError(
-            "LibreOffice не найден. Установите LibreOffice:\n"
-            "macOS: brew install --cask libreoffice\n"
-            "Ubuntu/Debian: sudo apt-get install libreoffice\n"
-            "Windows: скачайте с https://www.libreoffice.org/"
-        )
-
-    # Получаем директорию для выходного файла
+    soffice_cmd = find_libreoffice()
     output_dir = os.path.dirname(pdf_path)
 
+    cmd = [
+        soffice_cmd,
+        "--headless",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        output_dir,
+        docx_path
+    ]
+
+    logger.debug(f"Команда конвертации: {' '.join(cmd)}")
+
     try:
-        # Конвертируем DOCX в PDF
-        # --headless: запуск без GUI
-        # --convert-to pdf: формат конвертации
-        # --outdir: директория для выходного файла
-        cmd = [
-            soffice_cmd,
-            "--headless",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            output_dir,
-            docx_path
-        ]
-
-        logger.info(f"Выполнение команды: {' '.join(cmd)}")
-
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=PDF_CONVERSION_TIMEOUT,
             check=True
         )
 
-        logger.info(f"LibreOffice stdout: {result.stdout}")
+        logger.debug(f"LibreOffice stdout: {result.stdout}")
         if result.stderr:
             logger.warning(f"LibreOffice stderr: {result.stderr}")
 
         # Проверяем, что PDF создан
         if not os.path.exists(pdf_path):
-            raise Exception(f"PDF файл не был создан: {pdf_path}")
+            raise PDFConversionError(f"PDF файл не был создан: {pdf_path}")
 
         logger.info(f"Конвертация успешна: {pdf_path}")
 
     except subprocess.TimeoutExpired:
-        raise Exception("Таймаут при конвертации DOCX в PDF")
+        logger.error(f"Таймаут конвертации ({PDF_CONVERSION_TIMEOUT}s)")
+        raise PDFConversionTimeoutError(
+            f"Превышен таймаут конвертации ({PDF_CONVERSION_TIMEOUT} секунд)"
+        )
     except subprocess.CalledProcessError as e:
-        raise Exception(f"Ошибка конвертации: {e.stderr}")
-    except Exception as e:
-        raise Exception(f"Неожиданная ошибка при конвертации: {str(e)}")
+        logger.error(f"Ошибка LibreOffice: {e.stderr}")
+        raise PDFConversionError(f"Ошибка конвертации LibreOffice: {e.stderr}")
+
+
+def convert_to_pdf_with_retry(docx_path: str, pdf_path: str) -> None:
+    """
+    Конвертирует DOCX в PDF с повторными попытками
+
+    Args:
+        docx_path: Путь к DOCX файлу
+        pdf_path: Путь для PDF файла
+
+    Raises:
+        PDFConversionError: Если все попытки неудачны
+    """
+    last_error = None
+
+    for attempt in range(1, PDF_CONVERSION_RETRIES + 1):
+        try:
+            logger.info(f"Попытка конвертации {attempt}/{PDF_CONVERSION_RETRIES}")
+            convert_to_pdf(docx_path, pdf_path)
+            return  # Успешная конвертация
+        except PDFConversionTimeoutError as e:
+            last_error = e
+            logger.warning(f"Попытка {attempt} не удалась (таймаут)")
+            if attempt < PDF_CONVERSION_RETRIES:
+                logger.info("Повторная попытка...")
+        except (PDFConversionError, LibreOfficeNotFoundError) as e:
+            # Эти ошибки не имеет смысла повторять
+            raise
+
+    # Все попытки исчерпаны
+    logger.error(f"Все {PDF_CONVERSION_RETRIES} попытки конвертации не удались")
+    raise PDFConversionError(f"Не удалось сконвертировать PDF после {PDF_CONVERSION_RETRIES} попыток: {last_error}")

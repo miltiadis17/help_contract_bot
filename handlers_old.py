@@ -12,37 +12,64 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKey
 
 from states import ContractStates
 from contract_generator import generate_contract
-from config import (
-    AVAILABLE_FIELDS,
-    FIELD_PRESETS,
-    FIELD_HINTS,
-    UI_TEXTS,
-    BUTTON_MINIMAL,
-    BUTTON_STANDARD,
-    BUTTON_FULL,
-    BUTTON_CUSTOM,
-    BUTTON_SKIP,
-    BUTTON_CANCEL,
-    BUTTON_CANCEL_EDIT,
-    BUTTON_GENERATE,
-    BUTTON_EDIT,
-    BUTTON_RESTART,
-)
-from exceptions import (
-    TemplateNotFoundError,
-    PDFConversionError,
-    LibreOfficeNotFoundError,
-    ValidationError,
-)
-from validators import validate_field, validate_not_empty
 
 # Настройка логирования
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Создаем роутер
 router = Router()
 
-# Все константы теперь импортируются из config.py
+# Словарь с описанием всех доступных полей
+AVAILABLE_FIELDS = {
+    "client_full_name": "ФИО заказчика",
+    "client_passport_series": "Серия паспорта заказчика",
+    "client_passport_number": "Номер паспорта заказчика",
+    "client_passport_issued_by": "Кем выдан паспорт заказчика",
+    "client_passport_issue_date": "Дата выдачи паспорта заказчика",
+    "client_birth_date": "Дата рождения заказчика",
+    "client_birth_place": "Место рождения заказчика",
+    "client_address": "Адрес заказчика",
+    "client_phone": "Телефон заказчика",
+    "client_email": "Email заказчика",
+    "client_inn": "ИНН заказчика",
+    "executor_full_name": "ФИО исполнителя",
+    "executor_passport_series": "Серия паспорта исполнителя",
+    "executor_passport_number": "Номер паспорта исполнителя",
+    "executor_passport_issued_by": "Кем выдан паспорт исполнителя",
+    "executor_passport_issue_date": "Дата выдачи паспорта исполнителя",
+    "executor_birth_date": "Дата рождения исполнителя",
+    "executor_birth_place": "Место рождения исполнителя",
+    "executor_address": "Адрес исполнителя",
+    "executor_phone": "Телефон исполнителя",
+    "executor_email": "Email исполнителя",
+    "executor_inn": "ИНН исполнителя",
+    "executor_bank_name": "Название банка исполнителя",
+    "executor_bank_account": "Расчетный счет исполнителя",
+    "executor_bank_bik": "БИК банка исполнителя",
+    "executor_bank_corr_account": "Корр. счет банка исполнителя",
+    "contract_subject": "Предмет договора",
+    "contract_amount": "Сумма договора",
+    "contract_deadline": "Срок выполнения",
+    "contract_start_date": "Дата начала действия договора",
+    "contract_payment_terms": "Условия оплаты",
+    "contract_additional_terms": "Дополнительные условия",
+}
+
+# Предустановленные наборы полей
+FIELD_PRESETS = {
+    "minimal": [
+        "client_full_name", "client_address", "executor_full_name",
+        "executor_address", "contract_subject", "contract_amount"
+    ],
+    "standard": [
+        "client_full_name", "client_passport_series", "client_passport_number",
+        "client_address", "client_phone", "executor_full_name",
+        "executor_passport_series", "executor_passport_number", "executor_address",
+        "executor_phone", "contract_subject", "contract_amount", "contract_start_date"
+    ],
+    "full": list(AVAILABLE_FIELDS.keys())
+}
 
 
 def create_keyboard(buttons: List[str], row_width: int = 2) -> ReplyKeyboardMarkup:
@@ -51,7 +78,9 @@ def create_keyboard(buttons: List[str], row_width: int = 2) -> ReplyKeyboardMark
     return ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
 
 
-# validate_not_empty теперь импортируется из validators.py
+def validate_not_empty(text: str, min_length: int = 1, max_length: int = 500) -> bool:
+    """Базовая валидация: проверка на пустоту и длину"""
+    return text and min_length <= len(text.strip()) <= max_length
 
 
 def format_data_for_preview(data: Dict[str, Any], selected_fields: List[str]) -> str:
@@ -69,18 +98,13 @@ def format_data_for_preview(data: Dict[str, Any], selected_fields: List[str]) ->
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     """Обработчик команды /start"""
-    user_id = message.from_user.id
-    username = message.from_user.username or "unknown"
-
-    logger.info(f"Пользователь {user_id} (@{username}) запустил бота")
-
     await state.clear()
 
     keyboard = create_keyboard([
-        BUTTON_MINIMAL,
-        BUTTON_STANDARD,
-        BUTTON_FULL,
-        BUTTON_CUSTOM
+        "📝 Минимальный набор",
+        "📄 Стандартный набор",
+        "📚 Полный набор",
+        "✏️ Выбрать поля вручную"
     ], row_width=1)
 
     await message.answer(

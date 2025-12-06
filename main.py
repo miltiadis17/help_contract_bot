@@ -14,9 +14,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from dotenv import load_dotenv
 
 from handlers import router
+from middleware import AuthMiddleware, RateLimitMiddleware
+from config import BOT_TOKEN, TEMPLATE_PATH, ALLOWED_USER_IDS
 
 # Настройка логирования
 logging.basicConfig(
@@ -33,36 +34,36 @@ logger = logging.getLogger(__name__)
 async def main():
     """Главная функция запуска бота"""
 
-    # Загружаем переменные окружения
-    load_dotenv()
-
-    # Получаем токен бота
-    bot_token = os.getenv("BOT_TOKEN")
-    if not bot_token:
-        logger.error(
-            "Токен бота не найден!\n"
-            "Создайте файл .env и добавьте: BOT_TOKEN=your_token_here"
-        )
-        sys.exit(1)
+    # BOT_TOKEN теперь загружается в config.py
+    # Проверка уже выполнена при импорте config
 
     # Проверяем наличие шаблона
-    template_path = Path(__file__).parent / "dogovor_template.docx"
-    if not template_path.exists():
+    if not TEMPLATE_PATH.exists():
         logger.warning(
-            f"⚠️  Шаблон договора не найден: {template_path}\n"
+            f"⚠️  Шаблон договора не найден: {TEMPLATE_PATH}\n"
             "Создайте файл dogovor_template.docx с переменными для подстановки.\n"
-            "Пример переменных: {{{{ client_full_name }}}}, {{{{ contract_amount }}}}, и т.д."
+            "См. TEMPLATE_INSTRUCTIONS.md для инструкций."
         )
 
     # Инициализация бота и диспетчера
     bot = Bot(
-        token=bot_token,
+        token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher(storage=MemoryStorage())
 
+    # КРИТИЧНО: Регистрируем middleware
+    dp.message.middleware(AuthMiddleware())
+    dp.message.middleware(RateLimitMiddleware())
+
     # Регистрируем роутер
     dp.include_router(router)
+
+    # Логируем конфигурацию безопасности
+    if ALLOWED_USER_IDS:
+        logger.info(f"🔒 Аутентификация включена. Разрешённые пользователи: {ALLOWED_USER_IDS}")
+    else:
+        logger.warning("⚠️  Аутентификация отключена. Бот доступен всем пользователям!")
 
     logger.info("🚀 Бот запущен и готов к работе!")
     logger.info("Нажмите Ctrl+C для остановки")

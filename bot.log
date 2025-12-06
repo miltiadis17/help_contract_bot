@@ -1,0 +1,33 @@
+2025-12-06 23:16:53,886 - __main__ - INFO - 🔒 Аутентификация включена. Разрешённые пользователи: [2081281440]
+2025-12-06 23:16:53,886 - __main__ - INFO - 🚀 Бот запущен и готов к работе!
+2025-12-06 23:16:53,886 - __main__ - INFO - Нажмите Ctrl+C для остановки
+2025-12-06 23:16:53,949 - aiogram.dispatcher - INFO - Start polling
+2025-12-06 23:16:53,966 - aiogram.dispatcher - INFO - Run polling for bot @help_contract_bot id=8588440068 - 'Helper Contract Generator'
+2025-12-06 23:17:01,488 - middleware - WARNING - Попытка доступа от неавторизованного пользователя: 208128144 (@kiourntzidis)
+2025-12-06 23:17:01,579 - aiogram.event - INFO - Update id=367959643 is handled. Duration 93 ms by bot id=8588440068
+2025-12-06 23:18:16,712 - aiogram.dispatcher - WARNING - Received SIGINT signal
+2025-12-06 23:18:16,716 - aiogram.dispatcher - INFO - Polling stopped for bot @help_contract_bot id=8588440068 - 'Helper Contract Generator'
+2025-12-06 23:18:16,717 - aiogram.dispatcher - INFO - Polling stopped
+2025-12-06 23:18:16,970 - __main__ - INFO - Бот остановлен
+2025-12-06 23:18:21,729 - __main__ - INFO - 🔒 Аутентификация включена. Разрешённые пользователи: [2081281440]
+2025-12-06 23:18:21,729 - __main__ - INFO - 🚀 Бот запущен и готов к работе!
+2025-12-06 23:18:21,729 - __main__ - INFO - Нажмите Ctrl+C для остановки
+2025-12-06 23:18:21,810 - aiogram.dispatcher - INFO - Start polling
+2025-12-06 23:18:21,837 - aiogram.dispatcher - INFO - Run polling for bot @help_contract_bot id=8588440068 - 'Helper Contract Generator'
+2025-12-06 23:18:25,166 - middleware - WARNING - Попытка доступа от неавторизованного пользователя: 208128144 (@kiourntzidis)
+2025-12-06 23:18:25,256 - aiogram.event - INFO - Update id=367959644 is handled. Duration 90 ms by bot id=8588440068
+2025-12-06 23:19:08,200 - aiogram.dispatcher - WARNING - Received SIGINT signal
+2025-12-06 23:19:08,202 - aiogram.dispatcher - INFO - Polling stopped for bot @help_contract_bot id=8588440068 - 'Helper Contract Generator'
+2025-12-06 23:19:08,203 - aiogram.dispatcher - INFO - Polling stopped
+2025-12-06 23:19:08,455 - __main__ - INFO - Бот остановлен
+2025-12-06 23:19:11,265 - __main__ - INFO - 🔒 Аутентификация включена. Разрешённые пользователи: [208128144]
+2025-12-06 23:19:11,265 - __main__ - INFO - 🚀 Бот запущен и готов к работе!
+2025-12-06 23:19:11,265 - __main__ - INFO - Нажмите Ctrl+C для остановки
+2025-12-06 23:19:11,342 - aiogram.dispatcher - INFO - Start polling
+2025-12-06 23:19:11,363 - aiogram.dispatcher - INFO - Run polling for bot @help_contract_bot id=8588440068 - 'Helper Contract Generator'
+2025-12-06 23:19:14,462 - middleware - INFO - Авторизованный доступ: 208128144 (@kiourntzidis)
+2025-12-06 23:19:14,462 - handlers - INFO - Пользователь 208128144 (@kiourntzidis) запустил бота
+2025-12-06 23:19:14,557 - aiogram.event - INFO - Update id=367959645 is handled. Duration 95 ms by bot id=8588440068
+2025-12-06 23:22:12,722 - middleware - INFO - Авторизованный доступ: 208128144 (@kiourntzidis)
+2025-12-06 23:22:12,723 - handlers - INFO - Пользователь 208128144 (@kiourntzidis) запустил бота
+2025-12-06 23:22:12,805 - aiogram.event - INFO - Update id=367959646 is handled. Duration 84 ms by bot id=8588440068
