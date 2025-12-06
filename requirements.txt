@@ -1,0 +1,5 @@
+aiogram==3.15.0
+python-dotenv==1.0.1
+docxtpl==0.18.0
+python-docx==1.1.2
+aiofiles==24.1.0
